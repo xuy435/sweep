@@ -210,42 +210,37 @@ const SOUND_FILES = {
 // ═══════════════════════════════════════════════════════════════
 
 
-// ── Audio loader ─────────────────────────────────────────────
-const AC = new (window.AudioContext || window.webkitAudioContext)();
-const audioBuffers = { dirt: [], obstacle: {} };
+// ── Audio player (uses <audio> elements — works with mp4 video+audio files) ──
+const audioElements = { dirt: [], obstacle: {} };
 
-async function loadAudio(filename) {
-  try {
-    const res = await fetch(filename);
-    if (!res.ok) return null;
-    const arr = await res.arrayBuffer();
-    return await AC.decodeAudioData(arr);
-  } catch(e) { return null; }
+function createAudio(filename) {
+  const el = document.createElement('audio');
+  el.src = filename;
+  el.preload = 'auto';
+  return el;
 }
 
-async function loadAllSounds() {
-  // dirt
-  for (const f of SOUND_FILES.dirt) {
-    const buf = await loadAudio(f);
-    audioBuffers.dirt.push(buf); // null if file not found — fallback plays instead
-  }
-  // obstacles
-  for (const [type, f] of Object.entries(SOUND_FILES.obstacle)) {
-    audioBuffers.obstacle[type] = await loadAudio(f);
-  }
+function loadAllSounds() {
+  SOUND_FILES.dirt.forEach(f => {
+    audioElements.dirt.push(createAudio(f));
+  });
+  const seen = {};
+  Object.entries(SOUND_FILES.obstacle).forEach(([type, f]) => {
+    if (!seen[f]) seen[f] = createAudio(f);
+    audioElements.obstacle[type] = seen[f];
+  });
 }
 
-function playBuffer(buf, vol) {
-  if (!buf) return false;
-  vol = vol || 1.0;
-  const src = AC.createBufferSource();
-  const g = AC.createGain();
-  src.buffer = buf;
-  src.connect(g); g.connect(AC.destination);
-  g.gain.setValueAtTime(vol, AC.currentTime);
-  src.start();
+function playAudio(el) {
+  if (!el) return false;
+  const clone = el.cloneNode();
+  clone.volume = 1.0;
+  clone.play().catch(()=>{});
   return true;
 }
+
+// ── Fallback synth (used when file missing) ───────────────────
+const AC = new (window.AudioContext || window.webkitAudioContext)();
 
 // ── Fallback synth (used when mp3 not loaded yet) ────────────
 function tone(freq, type, dur, vol, slideFrom, delayMs) {
@@ -296,15 +291,15 @@ const fallbackObstacle = {
 
 function triggerDirt() {
   if (AC.state==='suspended') AC.resume();
-  const buf = audioBuffers.dirt[dirtIdx % audioBuffers.dirt.length];
-  if (!playBuffer(buf)) fallbackDirt();
+  const el = audioElements.dirt[dirtIdx % audioElements.dirt.length];
+  if (!playAudio(el)) fallbackDirt();
   dirtIdx++;
 }
 
 function triggerObstacle(type) {
   if (AC.state==='suspended') AC.resume();
-  const buf = audioBuffers.obstacle[type];
-  if (!playBuffer(buf)) (fallbackObstacle[type]||fallbackObstacle.wall)();
+  const el = audioElements.obstacle[type];
+  if (!playAudio(el)) (fallbackObstacle[type]||fallbackObstacle.wall)();
 }
 
 // ── Palette ───────────────────────────────────────────────────
@@ -365,7 +360,7 @@ function generateMap() {
     const wh=horiz?8+Math.random()*6:80+Math.random()*120;
     obstacles.push({x:m+Math.random()*(pw-ww),y:m+80+Math.random()*(ph-wh-80),w:ww,h:wh,type:'wall',revealed:false,flashT:0,lastHit:0});
   }
-  const dc=22+Math.floor(Math.random()*10);
+  const dc=50+Math.floor(Math.random()*16);
   for (let i=0;i<dc;i++) {
     dirts.push({x:m+Math.random()*pw,y:m+Math.random()*ph,r:3.5+Math.random()*4,collected:false,alpha:0});
   }
@@ -634,7 +629,8 @@ function restartGame() {
 }
 
 // preload sounds then draw idle
-loadAllSounds().then(()=>{ drawIdle(); });
+loadAllSounds();
+drawIdle();
 </script>
 </body>
 </html>
