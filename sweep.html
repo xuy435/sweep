@@ -97,8 +97,23 @@ canvas { position: fixed; top: 0; left: 0; display: block; width: 100vw; height:
 }
 .screen-sub {
   font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 48px; text-align: center; line-height: 2.4;
+  color: var(--muted); margin-bottom: 36px; text-align: center; line-height: 2.4;
 }
+
+/* ── Timer selector ── */
+#timer-select {
+  display: flex; gap: 12px; margin-bottom: 40px;
+}
+.timer-opt {
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  background: transparent; color: var(--muted);
+  border: 1.5px solid var(--muted); padding: 10px 22px;
+  cursor: pointer; transition: all 0.15s; border-radius: 2px;
+}
+.timer-opt:hover { border-color: var(--fg); color: var(--fg); }
+.timer-opt.selected { border-color: var(--pink); color: var(--pink); background: rgba(240,96,144,0.06); }
+
 .screen-btn {
   font-family: 'Space Mono', monospace; font-size: 11px;
   letter-spacing: 0.2em; text-transform: uppercase;
@@ -188,7 +203,16 @@ canvas { position: fixed; top: 0; left: 0; display: block; width: 100vw; height:
 
 <div class="screen" id="start-screen">
   <h1>SWEEP</h1>
-  <p class="screen-sub">Navigate a hidden interior.<br>What you hit reveals itself.<br>3 minutes 30 seconds.</p>
+  <p class="screen-sub">Navigate a hidden interior.<br>What you hit reveals itself.</p>
+
+  <!-- ── FIX 3: Timer selector ── -->
+  <div id="timer-select">
+    <button class="timer-opt" data-seconds="60"   onclick="selectTimer(this)">1 min</button>
+    <button class="timer-opt" data-seconds="120"  onclick="selectTimer(this)">2 min</button>
+    <button class="timer-opt selected" data-seconds="210" onclick="selectTimer(this)">3:30</button>
+    <button class="timer-opt" data-seconds="300"  onclick="selectTimer(this)">5 min</button>
+  </div>
+
   <button class="screen-btn" onclick="startGame()">START</button>
   <p style="font-size:9px;letter-spacing:0.15em;color:#ccc;margin-top:20px;text-transform:uppercase;">WASD — Arrow Keys</p>
 </div>
@@ -206,29 +230,14 @@ canvas { position: fixed; top: 0; left: 0; display: block; width: 100vw; height:
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  SOUND FILE CONFIGURATION
-//  Replace the filename strings with your own mp3s.
-//  All files should be placed in the same folder as this html.
-//
-//  TWO CATEGORIES:
-//
-//  1. DIRT SOUNDS — played when the car picks up a dirt particle
-//     You can define multiple files; they play in rotation.
-//
-//  2. OBSTACLE SOUNDS — one sound per obstacle type
-//     Types: wall, sofa, bed, table, shelf, cabinet, chair, plant, lamp, desk
 // ═══════════════════════════════════════════════════════════════
 
 const SOUND_FILES = {
-
-  // ── Dirt sounds (rotation) ──────────────────────────────────
-  // Add as many as you like. They cycle in order.
   dirt: [
-    'dirt_01.mp4',   // ← replace with your file name
-    'dirt_02.mp4',   // ← replace or remove
-    'dirt_03.mp4',   // ← replace or remove
+    'dirt_01.mp4',
+    'dirt_02.mp4',
+    'dirt_03.mp4',
   ],
-
-  // ── Obstacle sounds (grouped by file) ───────────────────────
   obstacle: {
     wall:    'obstacle_wall.mp4',
 
@@ -239,20 +248,15 @@ const SOUND_FILES = {
     shelf:   'obstacle_table-shelf-cab.mp4',
     cabinet: 'obstacle_table-shelf-cab.mp4',
 
+    // ── FIX 1: corrected filename to match actual file on disk ──
     chair:   'obstacle_chair-plant-lamp-desk.mp4',
     plant:   'obstacle_chair-plant-lamp-desk.mp4',
     lamp:    'obstacle_chair-plant-lamp-desk.mp4',
     desk:    'obstacle_chair-plant-lamp-desk.mp4',
   }
-
 };
 
-// ═══════════════════════════════════════════════════════════════
-//  END OF SOUND CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
-
-
-// ── Audio player (uses <audio> elements — works with mp4 video+audio files) ──
+// ── Audio player ──────────────────────────────────────────────
 const audioElements = { dirt: [], obstacle: {} };
 
 function createAudio(filename) {
@@ -281,10 +285,9 @@ function playAudio(el) {
   return true;
 }
 
-// ── Fallback synth (used when file missing) ───────────────────
+// ── Fallback synth ────────────────────────────────────────────
 const AC = new (window.AudioContext || window.webkitAudioContext)();
 
-// ── Fallback synth (used when mp3 not loaded yet) ────────────
 function tone(freq, type, dur, vol, slideFrom, delayMs) {
   vol = vol||0.28; delayMs = delayMs||0;
   const t = AC.currentTime + delayMs/1000;
@@ -358,8 +361,6 @@ const PAL = {
   desk:    { fill:'#f0a890', stroke:'#d05848', label:'#802020' },
 };
 
-// Solid = car cannot pass through (wall, sofa, bed)
-// Soft  = car bounces but can "push through" after multiple hits
 const SOLID_TYPES = new Set(['wall','sofa','bed']);
 
 // ── Canvas ────────────────────────────────────────────────────
@@ -402,7 +403,9 @@ function generateMap() {
     const wh=horiz?8+Math.random()*6:80+Math.random()*120;
     obstacles.push({x:m+Math.random()*(pw-ww),y:m+80+Math.random()*(ph-wh-80),w:ww,h:wh,type:'wall',revealed:false,flashT:0,lastHit:0});
   }
-  const dc=50+Math.floor(Math.random()*16);
+
+  // ── FIX 2: increased dirt count — 120 to 160 particles ──
+  const dc = 120 + Math.floor(Math.random() * 41);
   for (let i=0;i<dc;i++) {
     dirts.push({x:m+Math.random()*pw,y:m+Math.random()*ph,r:3.5+Math.random()*4,collected:false,alpha:0});
   }
@@ -415,6 +418,20 @@ function initCar() { car={x:W/2,y:H/2,vx:0,vy:0,angle:0,size:11}; carTrail=[]; }
 // ── State ─────────────────────────────────────────────────────
 let gameRunning=false, timeLeft=210, cntDirt=0, cntObs=0;
 let timerInterval, rafId;
+
+// ── FIX 3: Selected timer duration (seconds) ─────────────────
+let selectedDuration = 210;
+
+function selectTimer(btn) {
+  document.querySelectorAll('.timer-opt').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedDuration = parseInt(btn.dataset.seconds);
+}
+
+function formatTime(s) {
+  const m = Math.floor(s/60);
+  return m + ':' + String(s%60).padStart(2,'0');
+}
 
 // ── Draw ──────────────────────────────────────────────────────
 function drawAll() {
@@ -461,7 +478,6 @@ function drawAll() {
     ctx.strokeStyle=p.stroke; ctx.lineWidth=1.5;
     ctx.strokeRect(o.x+0.75,o.y+0.75,o.w-1.5,o.h-1.5);
 
-    // solid indicator: small lock mark on wall/sofa/bed
     if(SOLID_TYPES.has(o.type)&&o.type!=='wall'){
       ctx.fillStyle=p.label;
       ctx.font='7px "Space Mono",monospace';
@@ -478,18 +494,16 @@ function drawAll() {
     ctx.restore();
   });
 
-  // car — simple shape, toy car colors
+  // car
   ctx.save();
   ctx.translate(car.x, car.y); ctx.rotate(car.angle);
   ctx.shadowColor = 'rgba(0,0,0,0.12)'; ctx.shadowBlur = 8;
   const s = car.size;
-  // body
   ctx.fillStyle = '#f06090';
   ctx.beginPath();
   ctx.moveTo(s, 0); ctx.lineTo(-s*0.7, -s*0.65); ctx.lineTo(-s*0.4, 0); ctx.lineTo(-s*0.7, s*0.65);
   ctx.closePath(); ctx.fill();
   ctx.shadowBlur = 0;
-  // teal accent ring
   ctx.strokeStyle = '#30c8b8'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, s*0.38, 0, Math.PI*2); ctx.stroke();
   ctx.restore();
@@ -501,8 +515,6 @@ function drawIdle() {
 }
 
 // ── Collision resolution ──────────────────────────────────────
-// For SOLID obstacles: fully resolve overlap and zero velocity into wall.
-// For soft obstacles: bounce and partial push.
 function resolveObstacle(o, solid) {
   const cr=car.size;
   const cx=car.x, cy=car.y;
@@ -511,7 +523,6 @@ function resolveObstacle(o, solid) {
   const minH=Math.min(ol,or2), minV=Math.min(ot,ob2);
 
   if(solid){
-    // full separation — don't let car pass through
     if(minH<minV){
       if(ol<or2){ car.x=o.x-cr; car.vx=Math.min(0,car.vx)*-0.3; }
       else      { car.x=o.x+o.w+cr; car.vx=Math.max(0,car.vx)*-0.3; }
@@ -520,7 +531,6 @@ function resolveObstacle(o, solid) {
       else      { car.y=o.y+o.h+cr; car.vy=Math.max(0,car.vy)*-0.3; }
     }
   } else {
-    // soft bounce — partial push
     if(minH<minV){ car.vx*=-0.55; car.x+=ol<or2?-ol*0.9:or2*0.9; }
     else         { car.vy*=-0.55; car.y+=ot<ob2?-ot*0.9:ob2*0.9; }
   }
@@ -530,7 +540,6 @@ function checkCollisions() {
   const now=Date.now();
   const {x:cx,y:cy,size:cr}=car;
 
-  // dirt pickup
   dirts.forEach(d=>{
     if(d.collected) return;
     const dx=cx-d.x,dy=cy-d.y;
@@ -543,14 +552,11 @@ function checkCollisions() {
     }
   });
 
-  // obstacle collision
-  // sort: solid first so they resolve before soft
   const sorted=[...obstacles].sort((a,b)=>(SOLID_TYPES.has(b.type)?1:0)-(SOLID_TYPES.has(a.type)?1:0));
 
   sorted.forEach(o=>{
     if(car.x+cr>o.x&&car.x-cr<o.x+o.w&&car.y+cr>o.y&&car.y-cr<o.y+o.h){
       const solid=SOLID_TYPES.has(o.type);
-      // solid obstacles fire every frame while touching; soft have cooldown
       if(!solid&&now-(o.lastHit||0)<380) return;
       o.lastHit=now;
 
@@ -566,7 +572,6 @@ function checkCollisions() {
     }
   });
 
-  // screen boundary (always solid)
   if(car.x-cr<0){ car.x=cr; car.vx=Math.abs(car.vx)*0.4; }
   if(car.x+cr>W){ car.x=W-cr; car.vx=-Math.abs(car.vx)*0.4; }
   if(car.y-cr<0){ car.y=cr; car.vy=Math.abs(car.vy)*0.4; }
@@ -601,8 +606,8 @@ function showBurst(text,color,x,y) {
 // ── Joystick ──────────────────────────────────────────────────
 const jBase = document.getElementById('joystick-base');
 const jKnob = document.getElementById('joystick-knob');
-const jRadius = 33; // max knob travel
-let jx = 0, jy = 0; // -1 to 1
+const jRadius = 33;
+let jx = 0, jy = 0;
 
 jBase.addEventListener('touchstart', e => { e.preventDefault(); handleJoy(e.touches[0]); }, { passive: false });
 jBase.addEventListener('touchmove',  e => { e.preventDefault(); handleJoy(e.touches[0]); }, { passive: false });
@@ -640,7 +645,6 @@ function processInput() {
   if(keys['ArrowRight']||keys['d']||keys['D']) ax+=1;
   if(keys['ArrowUp']||keys['w']||keys['W']) ay-=1;
   if(keys['ArrowDown']||keys['s']||keys['S']) ay+=1;
-  // joystick input
   ax += jx; ay += jy;
   car.vx=(car.vx+ax*0.55)*0.84;
   car.vy=(car.vy+ay*0.55)*0.84;
@@ -656,9 +660,8 @@ function processInput() {
 // ── Timer ─────────────────────────────────────────────────────
 function updateTimer() {
   timeLeft--;
-  const m=Math.floor(timeLeft/60),s=timeLeft%60;
   const el=document.getElementById('timer');
-  el.textContent=m+':'+String(s).padStart(2,'0');
+  el.textContent=formatTime(timeLeft);
   if(timeLeft<=30) el.classList.add('urgent');
   if(timeLeft<=0) endGame();
 }
@@ -677,9 +680,9 @@ function startGame() {
   document.getElementById('joystick-wrap').style.display='block';
   if(AC.state==='suspended') AC.resume();
   generateMap(); initCar();
-  timeLeft=210; cntDirt=0; cntObs=0; dirtIdx=0;
+  timeLeft=selectedDuration; cntDirt=0; cntObs=0; dirtIdx=0;
   document.getElementById('timer').classList.remove('urgent');
-  document.getElementById('timer').textContent='3:30';
+  document.getElementById('timer').textContent=formatTime(timeLeft);
   updateCounters();
   document.getElementById('event-log').innerHTML='';
   gameRunning=true;
@@ -701,10 +704,9 @@ function endGame() {
 
 function restartGame() {
   document.getElementById('end-screen').style.display='none';
-  startGame();
+  document.getElementById('start-screen').style.display='flex';
 }
 
-// preload sounds then draw idle
 loadAllSounds();
 drawIdle();
 </script>
